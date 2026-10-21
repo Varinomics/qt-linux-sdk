@@ -4,6 +4,12 @@ An extraction-based development SDK for rebuilding modified Varinomics C++/Qt
 repositories on Ubuntu 24.04 x86_64 without administrator access, a desktop,
 Docker or an additional Qt download.
 
+This is the public Qt and Linux toolchain base. The complete private Logonomic
+development SDK includes this base and prebuilt product dependencies in one
+archive; its consumers do not download or assemble the base separately. See
+the [Logonomic build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md)
+for that handoff.
+
 [SDK_FOR_ASSISTANTS.md](SDK_FOR_ASSISTANTS.md) contains the download, activation,
 source preparation, build and focused-test commands. The SDK supplies Qt 6.12.0,
 CMake 3.31.10, Ninja 1.13.2 and scoped Linux support dependencies. The host

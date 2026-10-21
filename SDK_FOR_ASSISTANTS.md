@@ -1,5 +1,12 @@
 # Linux Qt SDK for repository work
 
+This guide covers the public Qt/toolchain base. For the complete private
+Logonomic environment with prebuilt product dependencies, use the single
+combined archive identified by
+[Logonomic's build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md).
+That archive already includes this base; it does not require this separate
+download or the source-dependency preparation below.
+
 SDK version **2026.10.21.1** packages **Qt 6.12.0**, Linux x86_64 shared
 libraries, CMake 3.31.10, Ninja 1.13.2, and Ubuntu 24.04 support tools and
 libraries. It matches the Qt patch version used by the inspected Logonomic and
