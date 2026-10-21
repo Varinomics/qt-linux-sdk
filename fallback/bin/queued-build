@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Fresh extraction consumers use serial flock admission when no owner queue exists.
+set -euo pipefail
+if [[ $# -lt 4 || $1 != --slots || ! $2 =~ ^[1-4]$ || $3 != -- ]]; then
+    printf '%s\n' 'Usage: queued-build --slots N -- COMMAND [ARGUMENT ...] (N=1..4)' >&2
+    exit 2
+fi
+slots=$2
+shift 3
+source "$(dirname -- "$(readlink -f -- "$0")")/../../activate.sh"
+
+command_name=$(basename -- "$1")
+native_width=
+expects_width=false
+requires_width=false
+for argument in "$@"; do
+    if [[ $expects_width == true ]]; then
+        native_width=$argument
+        expects_width=false
+        continue
+    fi
+    case "$argument" in
+        --parallel|-j) expects_width=true ;;
+        --parallel=*) native_width=${argument#--parallel=} ;;
+        -j[0-9]*) native_width=${argument#-j} ;;
+        --build) [[ $command_name != cmake ]] || requires_width=true ;;
+    esac
+done
+case "$command_name" in
+    ninja|make|gmake) requires_width=true ;;
+esac
+if [[ $expects_width == true ||
+      ( -n $native_width && $native_width != "$slots" ) ||
+      ( $requires_width == true && -z $native_width ) ]]; then
+    printf '%s\n' 'Native parallel width must be explicit and match --slots.' >&2
+    exit 2
+fi
+
+lock_directory="${XDG_CACHE_HOME:-$HOME/.cache}/varinomics-qt-sdk"
+mkdir -p -- "$lock_directory"
+exec 9>"$lock_directory/build.lock"
+printf 'Waiting for the SDK build queue (%s declared slot(s)).\n' "$slots" >&2
+"$SDK_ROOT/support/usr/bin/flock" -x 9
+exec "$@"

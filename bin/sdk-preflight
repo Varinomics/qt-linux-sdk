@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -ne 0 ]]; then
+    printf '%s\n' 'Usage: sdk-preflight' >&2
+    exit 2
+fi
+source "$(dirname -- "$(readlink -f -- "$0")")/../activate.sh"
+
+# The supplied RHEL 9 Qt kit was compiled for x86-64-v2, independently of its dispatch paths.
+if [[ $(uname -sm) != 'Linux x86_64' ]]; then
+    printf '%s\n' 'SDK preflight failed: Linux x86_64 is required.' >&2
+    exit 1
+fi
+required_cpu_flags=(cx16 lahf_lm popcnt pni ssse3 sse4_1 sse4_2)
+declare -A missing_cpu_flags=()
+cpu_flags_found=false
+while IFS=: read -r key flags; do
+    if [[ ! $key =~ ^flags[[:space:]]*$ ]]; then
+        continue
+    fi
+    cpu_flags_found=true
+    flags=${flags//$'\t'/ }
+    for feature in "${required_cpu_flags[@]}"; do
+        if [[ $feature == pni && " $flags " == *' sse3 '* ]]; then
+            continue
+        fi
+        if [[ " $flags " != *" $feature "* ]]; then
+            missing_cpu_flags[$feature]=true
+        fi
+    done
+done < /proc/cpuinfo
+if [[ $cpu_flags_found != true || ${#missing_cpu_flags[@]} -ne 0 ]]; then
+    printf '%s\n' 'SDK preflight failed: the vendor Qt binaries require x86-64-v2 CPU support.' >&2
+    printf 'Missing or unavailable CPU features: %s\n' "${!missing_cpu_flags[*]:-CPU flags unavailable}" >&2
+    exit 1
+fi
+printf '%s\n' 'CPU preflight: x86-64-v2 features available on the exposed processors.'
+exec "$SDK_ROOT/bin/python3" "$SDK_ROOT/libexec/preflight.py"

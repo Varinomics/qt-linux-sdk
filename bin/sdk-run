@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 0 ]]; then
+    printf '%s\n' 'Usage: sdk-run COMMAND [ARGUMENT ...]' >&2
+    exit 2
+fi
+source "$(dirname -- "$(readlink -f -- "$0")")/../activate.sh"
+exec "$@"

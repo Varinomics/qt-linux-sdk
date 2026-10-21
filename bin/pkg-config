@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname -- "$(readlink -f -- "$0")")/../activate.sh"
+export PKG_CONFIG_SYSROOT_DIR="$SDK_ROOT/support"
+export PKG_CONFIG_LIBDIR="$SDK_ROOT/support/usr/lib/x86_64-linux-gnu/pkgconfig:$SDK_ROOT/support/usr/lib/pkgconfig:$SDK_ROOT/support/usr/share/pkgconfig"
+unset PKG_CONFIG_PATH
+exec "$SDK_ROOT/support/usr/bin/pkgconf" "$@"

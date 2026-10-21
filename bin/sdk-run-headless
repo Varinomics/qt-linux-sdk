@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 0 ]]; then
+    printf '%s\n' 'Usage: sdk-run-headless COMMAND [ARGUMENT ...]' >&2
+    exit 2
+fi
+source "$(dirname -- "$(readlink -f -- "$0")")/../activate.sh"
+
+unset DISPLAY WAYLAND_DISPLAY QSG_RHI_BACKEND QT_OPENGL QT_XCB_GL_INTEGRATION
+unset QSG_RHI_PREFER_SOFTWARE_RENDERER MESA_LOADER_DRIVER_OVERRIDE GALLIUM_DRIVER
+export QT_QPA_PLATFORM=offscreen
+export QT_QUICK_BACKEND=software
+export LIBGL_ALWAYS_SOFTWARE=true
+
+runtime_directory=$(mktemp -d "${TMPDIR:-/tmp}/qt-sdk-headless.XXXXXXXX")
+trap 'rm -rf -- "$runtime_directory"' EXIT
+export XDG_RUNTIME_DIR="$runtime_directory"
+"$@"

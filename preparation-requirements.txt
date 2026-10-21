@@ -1,0 +1,11 @@
+# aqtinstall 3.3.0 was used for kit inventory; assembly directly consumes the frozen vendor lock.
+backports.zstd==1.7.0
+brotli==1.2.0
+inflate64==1.0.4
+multivolumefile==0.2.3
+psutil==7.2.2
+py7zr==1.1.3
+pybcj==1.0.8
+pycryptodomex==3.23.0
+pyppmd==1.3.1
+texttable==1.7.0

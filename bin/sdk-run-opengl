@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 0 ]]; then
+    printf '%s\n' 'Usage: sdk-run-opengl COMMAND [ARGUMENT ...]' >&2
+    exit 2
+fi
+source "$(dirname -- "$(readlink -f -- "$0")")/../activate.sh"
+
+unset DISPLAY WAYLAND_DISPLAY QT_QUICK_BACKEND QSG_RHI_PREFER_SOFTWARE_RENDERER
+unset QT_OPENGL QT_XCB_GL_INTEGRATION MESA_LOADER_DRIVER_OVERRIDE
+export QT_QPA_PLATFORM=xcb
+export QSG_RHI_BACKEND=opengl
+export LIBGL_ALWAYS_SOFTWARE=true
+export GALLIUM_DRIVER=llvmpipe
+export QSG_INFO=1
+export __GLX_VENDOR_LIBRARY_NAME=mesa
+
+if [[ -d /tmp/.X11-unix && ! -w /tmp/.X11-unix ]]; then
+    printf '%s\n' 'Software OpenGL is unavailable: Xvfb requires a writable /tmp/.X11-unix.' >&2
+    exit 1
+fi
+runtime_directory=$(mktemp -d "${TMPDIR:-/tmp}/qt-sdk-opengl.XXXXXXXX")
+xvfb_pid=
+cleanup()
+{
+    if [[ -n $xvfb_pid ]]; then
+        kill "$xvfb_pid" 2>/dev/null || true
+        for ((attempt = 0; attempt < 20; ++attempt)); do
+            if ! kill -0 "$xvfb_pid" 2>/dev/null; then
+                break
+            fi
+            sleep 0.05
+        done
+        kill -KILL "$xvfb_pid" 2>/dev/null || true
+        wait "$xvfb_pid" 2>/dev/null || true
+    fi
+    rm -rf -- "$runtime_directory"
+}
+trap cleanup EXIT
+export XDG_RUNTIME_DIR="$runtime_directory"
+mkfifo "$runtime_directory/display"
+
+xvfb_arguments=(
+    -displayfd 3 -screen 0 1280x1024x24 -nolisten tcp -noreset -ac
+    -xkbdir "$SDK_ROOT/support/usr/share/X11/xkb"
+)
+if [[ -d "$SDK_ROOT/support/usr/share/fonts/X11/misc" ]]; then
+    xvfb_arguments+=(-fp "$SDK_ROOT/support/usr/share/fonts/X11/misc")
+fi
+SDK_XKB_BIN_DIR="$SDK_ROOT/support/usr/bin" \
+    LD_PRELOAD="$SDK_ROOT/libexec/lib-sdk-xvfb-paths.so${LD_PRELOAD:+:$LD_PRELOAD}" \
+    "$SDK_ROOT/support/usr/bin/Xvfb" "${xvfb_arguments[@]}" \
+    3>"$runtime_directory/display" >"$runtime_directory/xvfb.log" 2>&1 &
+xvfb_pid=$!
+if ! IFS= read -r -t 15 display_number < "$runtime_directory/display"; then
+    printf '%s\n' 'Software OpenGL is unavailable: the bundled Xvfb server did not initialize.' >&2
+    tail -n 40 "$runtime_directory/xvfb.log" >&2
+    exit 1
+fi
+if [[ ! $display_number =~ ^[0-9]+$ ]]; then
+    printf '%s\n' 'Software OpenGL is unavailable: Xvfb returned an invalid display number.' >&2
+    exit 1
+fi
+export DISPLAY=":$display_number"
+printf 'SDK rendering request: xcb, Qt RHI OpenGL, Mesa llvmpipe, DISPLAY=%s\n' "$DISPLAY" >&2
+"$@"
