@@ -18,8 +18,8 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SDK_VERSION = "2026.10.21.1"
-SDK_NAME = f"varinomics-qt-6.12.0-linux-x86_64-gcc13-sdk-{SDK_VERSION}"
+SDK_VERSION = "2026.10.23.1"
+SDK_NAME = f"logonomic-linux-development-sdk-{SDK_VERSION}"
 QT_REPOSITORY = "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt6_6120/qt6_6120"
 QT_MODULES = [
     "qtbase", "qtsvg", "qtdeclarative", "qttools", "qttranslations", "qtwayland", "icu",
@@ -248,6 +248,15 @@ def assemble(work):
     for path in qt.rglob("*.debug"):
         path.unlink()
     relative_symlinks(support)
+    # These Debian host aliases need targets in the relocatable SDK tree.
+    for name, target in {
+        "etc/rmt": "../usr/sbin/rmt-tar",
+        "usr/share/zoneinfo/localtime": "Etc/UTC",
+        "usr/lib/ssl/cert.pem": "../../../etc/ssl/certs/ca-certificates.crt",
+    }.items():
+        link = support / name
+        link.unlink()
+        link.symlink_to(target)
     # Debian's lib -> usr/lib merge is represented inside this SDK as relative links.
     if (support / "lib").is_dir() and not (support / "lib").is_symlink():
         shutil.copytree(support / "lib", support / "usr" / "lib", dirs_exist_ok=True, symlinks=True)
@@ -284,7 +293,7 @@ def assemble(work):
         path.chmod(0o755)
     share_tool_aliases(stage)
     manifest = {
-        "sdk_version": SDK_VERSION, "archive_basename": SDK_NAME + ".tar.xz",
+        "sdk_version": SDK_NAME, "archive_basename": SDK_NAME + ".tar.xz",
         "platform": {"architecture": "x86_64", "glibc_minimum": "2.39", "gcc_major_minimum": 13,
                      "glibcxx_maximum": "GLIBCXX_3.4.32", "host_glibc": True,
                      "cpu_baseline": "x86-64-v2",
@@ -321,60 +330,131 @@ def assemble(work):
     print(f"STAGE={stage}", flush=True)
 
 
-def pack(work, qualification_snapshot=None):
+def entries(root: Path):
+    # Do not follow directory symlinks. Their link value belongs in the inventory.
+    for directory, directories, files in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        for name in sorted(directories + files):
+            path = parent / name
+            if path.is_symlink() or path.is_file():
+                yield path
+
+
+def inspect_tree(root: Path) -> list[dict]:
+    result = []
+    root_absolute = root.resolve()
+    for path in sorted(entries(root)):
+        name = path.relative_to(root).as_posix()
+        if name in ("share/payload-files.json", "SHA256SUMS"):
+            continue
+        if path.is_symlink():
+            target = os.readlink(path)
+            if target.startswith("/") or not path.resolve(strict=False).is_relative_to(root_absolute):
+                raise ValueError(f"Symlink escapes the SDK: {name} -> {target}")
+            # Vendor documentation links are optional. Runtime/development links must work.
+            optional = name.startswith("support/usr/share/doc/")
+            if not path.exists() and not optional:
+                raise ValueError(f"Missing required symlink target: {name} -> {target}")
+            record = {"path": name, "kind": "symlink", "target": target}
+            if not path.exists():
+                record["missing_optional_target"] = True
+            result.append(record)
+        else:
+            result.append({"path": name, "kind": "file", "size": path.stat().st_size,
+                           "sha256": sha256(path), "executable": bool(path.stat().st_mode & 0o111)})
+    return result
+
+
+def verify(root: Path) -> None:
+    root = root.resolve()
+    expected = json.loads((root / "share/payload-files.json").read_text())["files"]
+    actual = inspect_tree(root)
+    if expected != actual:
+        expected_by_name = {item["path"]: item for item in expected}
+        actual_by_name = {item["path"]: item for item in actual}
+        changed = [name for name in sorted(expected_by_name.keys() | actual_by_name.keys())
+                   if expected_by_name.get(name) != actual_by_name.get(name)]
+        raise ValueError(f"Payload differs from inventory: {changed[:20]}")
+    subprocess.run(["sha256sum", "--check", "--status", "SHA256SUMS"], cwd=root, check=True)
+    subprocess.run([str(root / "bin/sdk-preflight")],
+                   env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), check=True)
+    print(json.dumps({"verified": str(root), "files": len(expected)}, sort_keys=True))
+
+
+def pack(work, recipe_revision):
+    if not re.fullmatch(r"[0-9a-f]{40}", recipe_revision):
+        raise ValueError("A release archive requires the exact committed preparation recipe revision")
     stage = work / "stage" / SDK_NAME
     output = work / "dist"
     output.mkdir(parents=True, exist_ok=True)
+    archive = output / (SDK_NAME + ".tar.xz")
+    if archive.exists():
+        raise RuntimeError(f"Refusing to overwrite completed archive: {archive}")
     (stage / "share").mkdir(exist_ok=True)
-    if qualification_snapshot:
-        snapshot = json.loads(qualification_snapshot.read_text())
-        allowed_fields = {"key", "kind", "repository", "requested_ref", "commit", "checkout_path"}
-        snapshot["sources"] = [{key: value for key, value in source.items() if key in allowed_fields}
-                               for source in snapshot["sources"]]
-        snapshot["purpose"] = "Historical SDK qualification inputs; future reviews supply their own sources."
-        (stage / "share" / "qualification-sources.json").write_text(json.dumps(snapshot, indent=2) + "\n")
+    for name in ("README.md", "SDK_FOR_ASSISTANTS.md"):
+        shutil.copy2(ROOT / name, stage / name)
+        (stage / name).chmod(0o644)
     inventory_file = stage / "share" / "elf-inventory.json"
     run("python3", str(ROOT / "scripts" / "inspect_payload.py"), str(stage), "--output", str(inventory_file))
     inventory = json.loads(inventory_file.read_text())
     manifest_path = stage / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
+    manifest.update({
+        "sdk_version": SDK_NAME, "archive_basename": archive.name,
+        "distribution": "public", "artifact_type": "external-dependencies-development-sdk",
+        "preparation": {"repository": "https://github.com/Varinomics/qt-linux-sdk", "revision": recipe_revision},
+        "source_policy": {
+            "application_and_owned_dependencies": "external current source checkouts",
+            "bundled_product_sources": False, "bundled_product_binaries": False},
+    })
     manifest["platform"]["glibcxx_maximum"] = inventory["abi_maximum"]["GLIBCXX"]
     manifest["platform"]["measured_abi_maximum"] = inventory["abi_maximum"]
-    manifest["platform"]["cpu_baseline"] = "x86-64-v2"
-    manifest["platform"]["cpu_required_flags"] = ["cx16", "lahf_lm", "popcnt", "pni", "ssse3", "sse4_1", "sse4_2"]
-    manifest["platform"]["cpu_provenance"] = "Qt compile architecture probe TEST_subarch_result; RHEL9.6 supplier GCC11.5; no -march=native"
-    manifest["platform"].pop("cpu", None)
     manifest["optional_unavailable"] = inventory["optional_unavailable"]
-    manifest["vendor_binary_exception"] = "Required Qt static development helper libraries retain supplier embedded debug data; separate debug archives were not selected. SDK-owned helper is a symbol-free Release build."
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    archive = output / (SDK_NAME + ".tar.xz")
-    environment = os.environ.copy()
-    environment["XZ_OPT"] = "-T1 -0"
-    run("tar", "--sort=name", "--mtime=@1792537200", "--owner=0", "--group=0", "--numeric-owner",
-        "-cJf", str(archive), "-C", str(stage.parent), SDK_NAME, env=environment)
-    external_manifest = json.loads((stage / "manifest.json").read_text())
-    release_tag = f"qt-6.12.0-linux-x86_64-gcc13-sdk-{SDK_VERSION}"
-    external_manifest["archives"] = [{
-        "filename": archive.name, "size": archive.stat().st_size, "sha256": sha256(archive),
-        "url": f"https://github.com/Varinomics/qt-linux-sdk/releases/download/{release_tag}/{archive.name}",
-    }]
-    (output / "manifest.json").write_text(json.dumps(external_manifest, indent=2) + "\n")
-    checksum_files = [archive, output / "manifest.json"]
+    payload = {"schema_version": 1, "sdk_version": SDK_NAME, "files": inspect_tree(stage)}
+    (stage / "share/payload-files.json").write_text(json.dumps(payload, indent=2) + "\n")
+    files = sorted(path for path in entries(stage) if path.is_file() and not path.is_symlink()
+                   and path.relative_to(stage).as_posix() != "SHA256SUMS")
+    (stage / "SHA256SUMS").write_text("".join(
+        f"{sha256(path)}  {path.relative_to(stage).as_posix()}\n" for path in files))
+    verify(stage)
+    temporary = archive.with_name(archive.name + ".partial")
+    environment = dict(os.environ, XZ_OPT="-T1 -0")
+    run("tar", "--sort=name", "--mtime=@1792713600", "--owner=0", "--group=0", "--numeric-owner",
+        "--format=posix", "--pax-option=delete=atime,delete=ctime",
+        "-cJf", str(temporary), "-C", str(stage.parent), SDK_NAME, env=environment)
+    temporary.rename(archive)
+    release = {
+        "sdk_version": SDK_NAME, "filename": archive.name, "size": archive.stat().st_size,
+        "sha256": sha256(archive), "distribution": "public",
+        "download_url": f"https://github.com/Varinomics/qt-linux-sdk/releases/download/{SDK_NAME}/{archive.name}",
+    }
+    (output / "release.json").write_text(json.dumps(release, indent=2) + "\n")
+    manifest["archives"] = [release]
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    checksum_files = [archive, output / "manifest.json", output / "release.json"]
     (output / "SHA256SUMS").write_text("".join(f"{sha256(path)}  {path.name}\n" for path in checksum_files))
-    print((output / "SHA256SUMS").read_text(), flush=True)
+    print(json.dumps(release, sort_keys=True), flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["resolve", "assemble", "pack"])
-    parser.add_argument("--work", type=Path, required=True)
-    parser.add_argument("--qualification-snapshot", type=Path)
+    commands = parser.add_subparsers(dest="operation", required=True)
+    for operation in ("resolve", "assemble", "pack"):
+        command = commands.add_parser(operation)
+        command.add_argument("--work", type=Path, required=True)
+        if operation == "pack":
+            command.add_argument("--recipe-revision", required=True)
+    commands.add_parser("verify").add_argument("root", type=Path)
     args = parser.parse_args()
-    args.work.mkdir(parents=True, exist_ok=True)
-    if args.operation == "pack":
-        pack(args.work.resolve(), args.qualification_snapshot)
+    if args.operation == "verify":
+        verify(args.root)
     else:
-        {"resolve": resolve, "assemble": assemble}[args.operation](args.work.resolve())
+        args.work.mkdir(parents=True, exist_ok=True)
+        if args.operation == "pack":
+            pack(args.work.resolve(), args.recipe_revision)
+        else:
+            {"resolve": resolve, "assemble": assemble}[args.operation](args.work.resolve())
 
 
 if __name__ == "__main__":

@@ -1,25 +1,23 @@
 # Linux Qt SDK for repository work
 
-This guide covers the public Qt/toolchain base. The private Logonomic
-development archive supplies the same external dependency base; its current
-source-build procedure is maintained in
+This public SDK supplies the external Qt/toolchain dependencies for Logonomic.
+Its current source-build procedure is maintained in
 [Logonomic's build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md).
-Use either archive without downloading the other. Both require separate
-current application and owned-library sources.
+Application and owned-library sources are supplied separately and built from
+their current checkouts. No separate Qt or private development SDK is needed.
 
-SDK version **2026.10.21.1** packages **Qt 6.12.0**, Linux x86_64 shared
+SDK version **2026.10.23.1** packages **Qt 6.12.0**, Linux x86_64 shared
 libraries, CMake 3.31.10, Ninja 1.13.2, and Ubuntu 24.04 support tools and
 libraries. It matches the Qt patch version used by the inspected Logonomic and
 Soter Windows builds. Linux uses GCC and Mesa; it does not validate Windows,
 Direct3D, Android behavior, or hardware performance.
 
 Release:
-<https://github.com/Varinomics/qt-linux-sdk/releases/tag/qt-6.12.0-linux-x86_64-gcc13-sdk-2026.10.21.1>
+<https://github.com/Varinomics/qt-linux-sdk/releases/tag/logonomic-linux-development-sdk-2026.10.23.1>
 
-Archive: `varinomics-qt-6.12.0-linux-x86_64-gcc13-sdk-2026.10.21.1.tar.xz`.
-SHA-256: `05e8be4d5fb13a8b64f0316e473b76b43ec5b72997948828b4f31c5c0951d23f`.
-The repository handoff records the finished archive's hash. Its archived copy
-uses the accompanying external checksums to avoid a circular hash.
+Archive: `logonomic-linux-development-sdk-2026.10.23.1.tar.xz`.
+The release's `SHA256SUMS` records the archive hash. The handoff is also included
+inside the archive, so its checksum is supplied externally.
 
 The archive contains development headers, versioned Qt private headers, CMake
 packages, QML imports and plugins, Qt host tools and `qsb`. Selected modules are
@@ -38,8 +36,7 @@ Use a writable Linux x86_64 directory on Ubuntu 24.04 with glibc 2.39 or newer,
 GCC/G++ 13 or newer, Bash, coreutils and tar/xz. The supplied RHEL 9 Qt binaries
 require the x86-64-v2 CPU baseline (SSE3, SSSE3, SSE4.1/4.2, POPCNT, CX16 and
 LAHF/SAHF); preflight checks exposed CPU features before running SDK binaries.
-The 21 October target snapshot did not record CPU flags, so run this check on
-the actual consumer. The initial download command
+Run this check on the actual consumer. The initial download command
 uses the host's curl; downloading the same two files through ChatGPT's file
 tools is equivalent. Subsequent commands use the extracted tools. No Docker,
 administrator access, system installation, or new Qt download is needed.
@@ -47,13 +44,12 @@ administrator access, system installation, or new Qt download is needed.
 ```bash
 mkdir -p assistant-work
 cd assistant-work
-sdk_tag=qt-6.12.0-linux-x86_64-gcc13-sdk-2026.10.21.1
-sdk_name=varinomics-qt-6.12.0-linux-x86_64-gcc13-sdk-2026.10.21.1
+sdk_tag=logonomic-linux-development-sdk-2026.10.23.1
+sdk_name="$sdk_tag"
 sdk_url="https://github.com/Varinomics/qt-linux-sdk/releases/download/$sdk_tag"
 curl --fail --location --output "$sdk_name.tar.xz" "$sdk_url/$sdk_name.tar.xz"
 curl --fail --location --output SHA256SUMS "$sdk_url/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
-printf '%s  %s\n' 05e8be4d5fb13a8b64f0316e473b76b43ec5b72997948828b4f31c5c0951d23f "$sdk_name.tar.xz" | sha256sum --check -
 tar -xJf "$sdk_name.tar.xz"
 source "$PWD/$sdk_name/activate.sh"
 sdk-preflight

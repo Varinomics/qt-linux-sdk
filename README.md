@@ -4,9 +4,9 @@ An extraction-based development SDK for rebuilding modified Varinomics C++/Qt
 repositories on Ubuntu 24.04 x86_64 without administrator access, a desktop,
 Docker or an additional Qt download.
 
-This is the public Qt and Linux toolchain base. The private Logonomic
-development SDK packages this external dependency base in one archive; its
-consumers build Logonomic and owned libraries from current source checkouts. See
+This is the public SDK used for Logonomic development. It contains external
+dependencies only; consumers build Logonomic and owned libraries from current
+source checkouts. See
 the [Logonomic build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md)
 for that handoff.
 
@@ -37,14 +37,17 @@ python3 -m venv /tmp/qt-sdk-preparation
     --requirement preparation-requirements.txt
 queued-build --slots 1 -- /tmp/qt-sdk-preparation/bin/python scripts/prepare.py \
     assemble --work /path/to/writable/sdk-work
+recipe_revision=$(git rev-parse HEAD)
 queued-build --slots 1 -- /tmp/qt-sdk-preparation/bin/python scripts/prepare.py \
-    pack --work /path/to/writable/sdk-work
+    pack --work /path/to/writable/sdk-work --recipe-revision "$recipe_revision"
 ```
 
 `inputs.lock.json` freezes the exact public binary archives, their SHA-256
 hashes and sizes. Preparation reuses valid cached downloads. `assemble` requires
 a fresh staging directory and builds only the small SDK-owned Xvfb path helper;
-Qt and all support libraries are prebuilt supplier inputs. The Qt installed
+Qt and all support libraries are prebuilt supplier inputs. Packaging records
+and verifies every payload entry and includes no product sources, binaries or
+qualification source snapshots. The Qt installed
 development structure, including private headers and imported targets, remains
 complete for the selected module archives. Optional features whose additional
 modules are not selected are listed as unavailable in the manifest.
@@ -59,9 +62,11 @@ Inspect staged and relocated payloads with:
 
 ```bash
 python3 scripts/inspect_payload.py /path/to/sdk --output /path/to/elf-inventory.json
+python3 scripts/prepare.py verify /path/to/sdk
 ```
 
-The inventory records every ELF dependency and ABI requirement. Required
+The ELF inventory records every ELF dependency and ABI requirement; `verify`
+also checks the complete packaged file inventory. Required
 dependencies must resolve inside the SDK or the declared glibc/GCC runtime
 baseline. Optional SQL server drivers and Qt Quick 3D spatial audio remain
 explicitly unavailable unless their external capabilities are supplied.
