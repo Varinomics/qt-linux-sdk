@@ -1,11 +1,11 @@
 # Linux Qt SDK for repository work
 
-This guide covers the public Qt/toolchain base. For the complete private
-Logonomic environment with prebuilt product dependencies, use the single
-combined archive identified by
+This guide covers the public Qt/toolchain base. The private Logonomic
+development archive supplies the same external dependency base; its current
+source-build procedure is maintained in
 [Logonomic's build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md).
-That archive already includes this base; it does not require this separate
-download or the source-dependency preparation below.
+Use either archive without downloading the other. Both require separate
+current application and owned-library sources.
 
 SDK version **2026.10.21.1** packages **Qt 6.12.0**, Linux x86_64 shared
 libraries, CMake 3.31.10, Ninja 1.13.2, and Ubuntu 24.04 support tools and
@@ -72,25 +72,28 @@ libstdc++ or compiler.
 
 ## Prepare source inputs
 
-Use the Logonomic checkout being reviewed. For an initial checkout, authenticate
-Git normally if access requires it, then run:
+Use the Logonomic checkout being reviewed. For an initial checkout, use the
+session's authorized Git access and authenticated GitHub CLI, with Node.js
+available for the repository's source resolver:
 
 ```bash
 mkdir -p sources
 git clone https://github.com/Varinomics/logonomic.git sources/logonomic
 export LOGONOMIC_SOURCE="$PWD/sources/logonomic"
+node "$LOGONOMIC_SOURCE/tools/release_sources.js" resolve-sdk \
+    "$LOGONOMIC_SOURCE" "$PWD/resolved-source-tuple.json"
 python3 "$LOGONOMIC_SOURCE/tools/linux_sdk_sources.py" prepare \
     --source-root "$LOGONOMIC_SOURCE" --workspace "$PWD/sources" \
-    --tuple "$SDK_ROOT/share/qualification-sources.json" \
+    --tuple "$PWD/resolved-source-tuple.json" \
     --output "$PWD/source-paths.cmake" --manifest "$PWD/resolved-sources.json"
 ```
 
-`release/sources.json` and its existing resolver own the dependency graph. The
-recorded tuple gives exact historical qualification inputs; it does not pin the
-repositories' forward dependency declarations. Source preparation retrieves
-those inputs explicitly. It requires network access and authorization for any
-private repositories. Credentials and private source are excluded from the
-public SDK.
+`release/sources.json` and its existing resolver own the dependency graph. Resolve
+it at the start of the task: owned libraries track `master`, and the resulting
+tuple records the sources selected for that task. Archived qualification tuples
+describe historical results and are not the default inputs for new work.
+Source preparation requires network access and authorization for private
+repositories. Credentials and private source are excluded from the public SDK.
 
 For a modified dependency, add its source override to the same command, for
 example `--source vnm_plot="$PWD/review/vnm_plot"`. The application is always
