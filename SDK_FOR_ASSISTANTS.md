@@ -4,13 +4,11 @@ This public SDK supplies the external Qt/toolchain dependencies for Logonomic.
 Its current source-build procedure is maintained in
 [Logonomic's build documentation](https://github.com/Varinomics/logonomic/blob/master/docs/linux_assistant_sdk.md).
 Application and owned-library sources are supplied separately and built from
-their current checkouts. No separate Qt or private development SDK is needed.
+their current checkouts.
 
 SDK version **2026.10.23.1** packages **Qt 6.12.0**, Linux x86_64 shared
 libraries, CMake 3.31.10, Ninja 1.13.2, and Ubuntu 24.04 support tools and
-libraries. It matches the Qt patch version used by the inspected Logonomic and
-Soter Windows builds. Linux uses GCC and Mesa; it does not validate Windows,
-Direct3D, Android behavior, or hardware performance.
+libraries. The SDK targets Linux with GCC and Mesa.
 
 Release:
 <https://github.com/Varinomics/qt-linux-sdk/releases/tag/logonomic-linux-development-sdk-2026.10.23.1>
@@ -86,8 +84,7 @@ python3 "$LOGONOMIC_SOURCE/tools/linux_sdk_sources.py" prepare \
 
 `release/sources.json` and its existing resolver own the dependency graph. Resolve
 it at the start of the task: owned libraries track `master`, and the resulting
-tuple records the sources selected for that task. Archived qualification tuples
-describe historical results and are not the default inputs for new work.
+tuple records the sources selected for that task.
 Source preparation requires network access and authorization for private
 repositories. Credentials and private source are excluded from the public SDK.
 

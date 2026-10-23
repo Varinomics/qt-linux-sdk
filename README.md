@@ -46,10 +46,9 @@ queued-build --slots 1 -- /tmp/qt-sdk-preparation/bin/python scripts/prepare.py 
 hashes and sizes. Preparation reuses valid cached downloads. `assemble` requires
 a fresh staging directory and builds only the small SDK-owned Xvfb path helper;
 Qt and all support libraries are prebuilt supplier inputs. Packaging records
-and verifies every payload entry and includes no product sources, binaries or
-qualification source snapshots. The Qt installed
-development structure, including private headers and imported targets, remains
-complete for the selected module archives. Optional features whose additional
+and verifies every payload entry and includes no product sources or binaries.
+The Qt development structure, including private headers and imported targets,
+remains complete for the selected module archives. Optional features whose additional
 modules are not selected are listed as unavailable in the manifest.
 
 `scripts/prepare.py resolve --work /path/to/writable/sdk-work` is the explicit
